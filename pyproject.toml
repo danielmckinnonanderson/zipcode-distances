@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "zipcode-distances"
+version = "0.1.0"
+description = "Simple scripts for calculating straight-line distances between zipcodes"
+authors = ["Daniel Anderson"]
+readme = "README.md"
+packages = [{include = "zipcode_distances"}]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+geopy = "^2.4.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
