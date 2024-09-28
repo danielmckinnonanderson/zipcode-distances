@@ -1,15 +1,16 @@
 [tool.poetry]
 name = "zipcode-distances"
 version = "0.1.0"
-description = "Simple scripts for calculating straight-line distances between zipcodes"
-authors = ["Daniel Anderson"]
+description = "Simple script for calculating straight-line distances between US zipcodes"
+authors = ["danielmckinnonanderson <danielmckinnon.anderson@gmail.com>"]
+license = "MIT"
 readme = "README.md"
 packages = [{include = "zipcode_distances"}]
-license = "MIT"
 
 [tool.poetry.dependencies]
 python = "^3.10"
 geopy = "^2.4.1"
+colorama = "^0.4.6"
 
 
 [build-system]

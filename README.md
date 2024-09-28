@@ -1,41 +1,41 @@
-Two scripts made for getting distances between zipcodes.
-
-I arbitrary split them and used files as an interface to try to make them more composable,
-but there's nothing stopping you from moving one's code into the other file to execute them in one shot.
-
-The first script, `zips_to_latlong.py` contains a list of zipcodes that should be updated.
-When run, it will geocode all these zip codes into latitude & longitude pairs using OpenStreetMaps.
-Then, it will write a CSV file which contains zipcode, latitude, and longitude as its three columns per row.
-
-The second script, `zll_to_distances.py` contains an origin zipcode variable, and a list of zipcodes to calculate the distances to.
-For each zip code in the list, it will calculate the distance between the origin's lat / long, and the destination zip's lat long.
-Finally, it will write these distances out to a .txt file of your choice.
-You can control whether the output is verbose: `The distance between <ORIGIN> and <DESTINATION> is <DISTANCE>mi`
-Or sparse: `<DISTANCE>`
-Within the script's global configuration
+Script for calculating distances between zipcodes.
+Start with a text file of zip codes and an origin zip code,
+end with a CSV file with columns `origin_zip`, `destination_zip`, `distance` in miles.
 
 ### Quickstart
-Open the scripts and update the global configuration for your usecase.
+Create a file "zipcodes.txt" in this directory.
+Include all zip codes that you need to calculate distances to, in order. Origin zip code should be first.
+The file's content should look like this:
+```txt
+90210
+33101
+11201
+00123
+```
+
+Next, open the script and update the global configuration variables at the top for your usecase.
+You'll need to specify the path to your zipcodes file (if you followed these instructions exactly, the default "zipcodes.txt" will be correct),
+along with the path to the file where you'll save your cache for the geocoded zip codes,
+the path to the file where you'll save your final output, and the origin zip code itself.
+
 Then, run.
+
 With poetry:
 ```bash
-# Install dependency
+# Install dependencies
 poetry install
 
 # Start the venv
 poetry shell
 
 # Run the first script, which will generate a CSV of zipcodes to their lat/long coords.
-poetry run python3 zips_to_latlong.py
-
-# Run the second script, which will generate a TXT of distances between origin and each desination zipcode.
-poetry run python3 zll_to_distances.py
+poetry run python3 zipcodes_to_distances.py
 ```
 
 With vanilla python:
 ```bash
 pip3 install geopy
-python3 zips_to_latlong.py
-python3 zll_to_distances.py
+pip3 install colorama # For colorful terminal output
+python3 zipcodes_to_distances.py
 ```
 
