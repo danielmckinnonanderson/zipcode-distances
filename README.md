@@ -15,29 +15,31 @@ The file's content should look something like this:
 00123
 ```
 
-Next, open the script and update the global configuration variables at the very top for your usecase.
-You'll need to specify the path to your zipcodes file (if you followed these instructions exactly, the default "zipcodes.txt" will be correct),
-along with the path to the file where you'll save your cache for the geocoded zip codes,
-the path to the file where you'll save your final output, and the origin zip code itself.
+Then, install dependencies:
+```bash
+pip3 install geopy
+pip3 install colorama
+```
+
+Or, install dependencies with poetry:
+```bash
+poetry shell
+poetry install
+```
+
+
+Open the script file in `./zipcode_distances/__init__.py`, and update the configuration variables at the top for your use.
+Be sure to update the `origin_zipcode` -- The other defaults are likely fine for most users but your use will probably require a unique origin.
+
 
 Then, run.
+Vanilla python:
+```bash
+python3 zipcode_distances/__init__.py
+```
 
 With poetry:
 ```bash
-# Install dependencies
-poetry install
-
-# Start the venv
-poetry shell
-
-# Run the first script, which will generate a CSV of zipcodes to their lat/long coords.
-poetry run python3 zipcodes_to_distances.py
-```
-
-With vanilla python:
-```bash
-pip3 install geopy
-pip3 install colorama # For colorful terminal output
-python3 zipcodes_to_distances.py
+poetry run python3 zipcode_distances/__init__.py
 ```
 

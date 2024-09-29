@@ -65,69 +65,73 @@ def request_geocode(zipcode: str, _geocoder: Nominatim) -> Location | None:
 
 
 def load_zipcodes_from_file(filepath: Path) -> List[str] | None:
-    if not filepath.exists():
+    try:
+        result: List[str] = []
+
+        with open(filepath, "r") as zipcodes_file:
+            lines = zipcodes_file.readlines()
+            for line in lines:
+                line = line.removesuffix("\n")
+                if line.isspace() or line == "":
+                    continue
+
+                
+                if "," in line:
+                    warn("Zipcodes file contains commas in lines, these will be ignored. Zipcodes file is expecting one zipcode per line, without quotes or delimiters.")
+                
+                result.append(line)
+
+        return result
+    except FileNotFoundError:
         printerr(f"Zipcodes file does not exist. Check if the filepath '{filepath}' you provided exists.")
 
-    result: List[str] = []
-
-    with open(filepath, "r") as zipcodes_file:
-        lines = zipcodes_file.readlines()
-        for line in lines:
-            if "\n" in line:
-                line = line.removesuffix("\n")
-            
-            if "," in line:
-                warn("Zipcodes file contains commas in lines, these will be ignored. Zipcodes file is expecting one zipcode per line, without quotes or delimiters.")
-            
-            result.append(line)
-
-    return result
 
 def load_cached_geocoded_zipcodes(filepath: Path) -> Dict[str, Tuple[float, float]] | None:
     if not str(filepath).endswith(".csv"):
         printerr(f"Geocode cache file '{filepath}' is not a .csv file. Make sure the extension is correct and retry.")
         return None
 
-    filepath.touch()
+    try:
+        result = {}
 
-    if not filepath.exists():
+        with open(filepath, "r") as cache_file:
+            lines = cache_file.readlines()
+
+            if len(lines) == 0:
+                warn("Cache file was empty")
+                return None
+            
+            header = lines[0]
+            parts = header.split(",")
+            if len(parts) != 3:
+                printerr(f"Expected cache file '{filepath}' to have three columns. Instead, the header indicates that it has '{len(parts)}'.")
+            if parts[0] != "zipcode":
+                printerr(f"Expected the first header section of CSV '{filepath}' to be 'zipcode', instead was '{parts[0]}'. Either correct the header or completely delete the file and re-generate it.")
+            if parts[1] != "latitude":
+                printerr(f"Expected the first header section of CSV '{filepath}' to be 'latitude', instead was '{parts[0]}'. Either correct the header or completely delete the file and re-generate it.")
+            if parts[2].rstrip() != "longitude":
+                printerr(f"Expected the first header section of CSV '{filepath}' to be 'longitude', instead was '{parts[0]}'. Either correct the header or completely delete the file and re-generate it.")
+
+            info(f"Geocode cache file has {len(lines)} rows. Loading...")
+
+            for line in lines:
+                line = line.rstrip()
+                parts = line.split(",")
+
+                zipcode   = parts[0]
+                latitude  = parts[1]
+                longitude = parts[2]
+
+                result[zipcode] = (latitude, longitude)
+
+        info(f"Done loading cache file into memory. Cache has {len(lines)} entries.")
+        return result
+
+    except FileNotFoundError:
         info(f"Geocode cache file '{filepath}' does not exist.")
-        return None
 
-    result = {}
-    
-    with open(filepath, "r") as cache_file:
-        lines = cache_file.readlines()
+    return None
 
-        if len(lines) == 0:
-            warn("Cache file was empty")
-            return None
-        
-        header = lines[0]
-        parts = header.split(",")
-        if len(parts) != 3:
-            printerr(f"Expected cache file '{filepath}' to have three columns. Instead, the header indicates that it has '{len(parts)}'.")
-        if parts[0] != "zipcode":
-            printerr(f"Expected the first header section of CSV '{filepath}' to be 'zipcode', instead was '{parts[0]}'. Either correct the header or completely delete the file and re-generate it.")
-        if parts[1] != "latitude":
-            printerr(f"Expected the first header section of CSV '{filepath}' to be 'latitude', instead was '{parts[0]}'. Either correct the header or completely delete the file and re-generate it.")
-        if parts[2].rstrip() != "longitude":
-            printerr(f"Expected the first header section of CSV '{filepath}' to be 'longitude', instead was '{parts[0]}'. Either correct the header or completely delete the file and re-generate it.")
-
-        info(f"Geocode cache file has {len(lines)} rows. Loading...")
-
-        for line in lines:
-            line = line.rstrip()
-            parts = line.split(",")
-
-            zipcode   = parts[0]
-            latitude  = parts[1]
-            longitude = parts[2]
-
-            result[zipcode] = (latitude, longitude)
-
-    info(f"Done loading cache file into memory. Cache has {len(lines)} entries.")
-    return result
 
 
 def request_and_cache_all(zipcodes: List[str], cache: Dict[str, Tuple[float, float]]):
@@ -199,6 +203,8 @@ def write_cache_to_csv(csv_filepath: Path, cache: Dict[str, Tuple[float, float]]
         csv_filepath.touch()
 
     with open(csv_filepath, "w") as cache_file:
+        cache_file.write("zipcode,latitude,longitude\n")
+
         for key, value in cache.items():
             cache_file.write(f"{key},{value[0]},{value[1]}\n")
 
@@ -206,19 +212,19 @@ def write_cache_to_csv(csv_filepath: Path, cache: Dict[str, Tuple[float, float]]
 
 
 def compute_distance(origin_zipcode: str, destination_zipcode: str, cache: Dict[str, Tuple[float, float]]) -> float | None:
-    if origin_zipcode == destination_zipcode:
-        warn(f"Was asked to compute the distance between {origin_zipcode} and {destination_zipcode}, this was probably a mistake. Skipping.")
-        return None
-
-    if origin_zipcode not in cache:
-        printerr(f"Couldn't find zipcode '{origin_zipcode}' in cache. Skipping calculation...")
-        return None
-
-    if destination_zipcode not in cache:
-        printerr(f"Couldn't find zipcode '{destination_zipcode}' in cache. Skipping calculation...")
-        return None
-    
     try:
+        if origin_zipcode == destination_zipcode:
+            warn(f"Was asked to compute the distance between {origin_zipcode} and {destination_zipcode}, this was probably a mistake. Skipping.")
+            return None
+
+        if origin_zipcode not in cache:
+            printerr(f"Couldn't find zipcode '{origin_zipcode}' in cache. Skipping calculation...")
+            return None
+
+        if destination_zipcode not in cache:
+            printerr(f"Couldn't find zipcode '{destination_zipcode}' in cache. Skipping calculation...")
+            return None
+
         origin = cache[origin_zipcode]
         destination = cache[destination_zipcode]
         return distance.distance(origin, destination).miles
