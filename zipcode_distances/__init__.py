@@ -71,7 +71,7 @@ def load_zipcodes_from_file(filepath: Path) -> List[str] | None:
         with open(filepath, "r") as zipcodes_file:
             lines = zipcodes_file.readlines()
             for line in lines:
-                line = line.removesuffix("\n")
+                line = line.rstrip()
                 if line.isspace() or line == "":
                     continue
 
@@ -101,7 +101,7 @@ def load_cached_geocoded_zipcodes(filepath: Path) -> Dict[str, Tuple[float, floa
                 warn("Cache file was empty")
                 return None
             
-            header = lines[0]
+            header = lines.pop(0)
             parts = header.split(",")
             if len(parts) != 3:
                 printerr(f"Expected cache file '{filepath}' to have three columns. Instead, the header indicates that it has '{len(parts)}'.")
