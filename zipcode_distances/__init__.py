@@ -1,3 +1,4 @@
+from functools import reduce
 import time
 import random
 from typing import Dict, List, Tuple
@@ -9,16 +10,13 @@ from geopy.geocoders.arcgis import Location
 from colorama import Fore, init as colorama_init
 
 # List of zipcodes to geocode
-zipcodes_file: Path  = Path("./zipcodes.txt")
+zipcodes_file: Path  = Path("./zipcodes.csv")
 
 # Where we'll write our cached geocoded zips (to prevent rate-limit)
 geocode_cache_file: Path = Path("./geocode_cache.csv")
 
 # Where we'll write our final output, the csv of origin zip, destination zip, and distance in miles
 distances_file: Path = Path("./distances.csv")
-
-# Origin zip code. Make sure this is in your zipcodes_file
-origin_zipcode: str = "90210"
 
 
 # Initialize colorful output messages
@@ -64,24 +62,35 @@ def request_geocode(zipcode: str, _geocoder: Nominatim) -> Location | None:
     return None
 
 
-def load_zipcodes_from_file(filepath: Path) -> List[str] | None:
+def load_zipcodes_from_file(filepath: Path) -> List[Tuple[str, str]] | None:
+    if not str(filepath).endswith(".csv"):
+        printerr(f"Zipcodes file '{filepath}' is not a .csv file. Make sure the extension is correct and retry.")
+        return None
+
     try:
-        result: List[str] = []
+        result: List[Tuple[str, str]] = []
 
         with open(filepath, "r") as zipcodes_file:
             lines = zipcodes_file.readlines()
+
+            header = lines.pop(0)
+            cols = header.split(",")
+            if len(cols) != 2:
+                printerr("Expected zipcodes file to have two columns (origin and destination). Is your input file formatted correctly?")
+                return None
+
             for line in lines:
                 line = line.rstrip()
                 if line.isspace() or line == "":
                     continue
 
-                
-                if "," in line:
-                    warn("Zipcodes file contains commas in lines, these will be ignored. Zipcodes file is expecting one zipcode per line, without quotes or delimiters.")
-                
-                result.append(line)
+                cols = line.split(",")
 
+                result.append((cols[0], cols[1]))
+
+        info("Found {len(result)} rows in zipcodes.csv")
         return result
+    
     except FileNotFoundError:
         printerr(f"Zipcodes file does not exist. Check if the filepath '{filepath}' you provided exists.")
 
@@ -134,37 +143,42 @@ def load_cached_geocoded_zipcodes(filepath: Path) -> Dict[str, Tuple[float, floa
 
 
 
-def request_and_cache_all(zipcodes: List[str], cache: Dict[str, Tuple[float, float]]):
+def request_and_cache_all(zipcodes: List[Tuple[str, str]], cache: Dict[str, Tuple[float, float]]):
     # Use to calculate a random time to wait, to seem more "organic" when requesting
     # These times are in milliseconds
     get_time_to_wait = lambda: random.randint(278, 3221)
+
+    # The input zipcodes is expected to reflect the structure of the CSV file, with two zips per row.
+    # So first, we'll convert this list into a flattened list structure.
+    zips_list: List[str] = reduce(lambda acc, pair: acc + list(pair), zipcodes, [])
+    info(f"{len(zips_list)}")
+
+    qt_done     = int(len(zips_list) * 0.25)
+    hf_done     = int(len(zips_list) * 0.50)
+    tq_done     = int(len(zips_list) * 0.75)
+    almost_done = int(len(zips_list) * 0.90)
+    last_update = 0
 
     number_cached = 0
     number_requested = 0
     time_to_wait = 0.0
 
-    qt_done     = int(len(zipcodes) * 0.25)
-    hf_done     = int(len(zipcodes) * 0.50)
-    tq_done     = int(len(zipcodes) * 0.75)
-    almost_done = int(len(zipcodes) * 0.90)
-
-    last_update = 0
     n = 0
     
-    for zipcode in zipcodes:
+    for zipcode in zips_list:
         n += 1
         # Progress update
         if n >= qt_done and n < hf_done and last_update != qt_done:
-            info(f"25% done processing zipcodes for cache. Progress {n}/{len(zipcodes)}")
+            info(f"25% done processing zipcodes for cache. Progress {n}/{len(zips_list)}")
             last_update = qt_done
         elif n >= hf_done and n < tq_done and last_update != hf_done:
-            info(f"50% done processing zipcodes for cache. Progress {n}/{len(zipcodes)}")
+            info(f"50% done processing zipcodes for cache. Progress {n}/{len(zips_list)}")
             last_update = hf_done
         elif n >= tq_done and n < almost_done and last_update != tq_done:
-            info(f"75% done processing zipcodes for cache. Progress {n}/{len(zipcodes)}")
+            info(f"75% done processing zipcodes for cache. Progress {n}/{len(zips_list)}")
             last_update = tq_done
         elif n >= almost_done and last_update != almost_done:
-            info(f"90% done processing zipcodes for cache. Progress {n}/{len(zipcodes)}")
+            info(f"90% done processing zipcodes for cache. Progress {n}/{len(zips_list)}")
             last_update = almost_done
 
 
@@ -173,7 +187,7 @@ def request_and_cache_all(zipcodes: List[str], cache: Dict[str, Tuple[float, flo
             number_cached += 1
             continue
 
-        user_agent = "ethical_".format(random.randint(1000, 999999))
+        user_agent = "ethical_{}".format(random.randint(1000, 999999))
         geocoder = Nominatim(user_agent=user_agent)
 
         try:
@@ -193,9 +207,10 @@ def request_and_cache_all(zipcodes: List[str], cache: Dict[str, Tuple[float, flo
             warn(f"Zipcode '{zipcode}' was unable to be geocoded and will be skipped.")
             pass
 
-    info(f"100% Done requesting geocodes for {len(zipcodes)} zipcodes. {number_cached} were already cached and did not need to be requested. Made {number_requested} requests to fill in the rest.")
-    if number_requested + number_cached != len(zipcodes) != len(cache):
-        warn(f"You provided {len(zipcodes)} zipcodes, but only {number_cached + number_requested} were accounted for between the cache and the requests. Check earlier log output to see which ones were skipped, if any.")
+    info(f"100% Done requesting geocodes for {len(zips_list)} zipcodes. {number_cached} were already cached and did not need to be requested. Made {number_requested} requests to fill in the rest.")
+    if number_requested + number_cached != len(zips_list) != len(cache):
+        warn(f"You provided {len(zipcodes)} rows containing a total of {len(zips_list)} zipcodes, but only {number_cached + number_requested} were accounted for between the cache and the requests. "
+             + "Check earlier log output to see which ones were skipped, if any.")
 
 
 def write_cache_to_csv(csv_filepath: Path, cache: Dict[str, Tuple[float, float]]):
@@ -233,31 +248,37 @@ def compute_distance(origin_zipcode: str, destination_zipcode: str, cache: Dict[
     return None
 
 
-def compute_distances(origin_zipcode: str, destinations: List[str], cache: Dict[str, Tuple[float, float]]) -> Dict[Tuple[str, str], float]:
-    info(f"Computing distances for {len(destinations)} elements...")
-
-    if origin_zipcode not in cache:
-        printerr(f"Origin zipcode '{origin_zipcode}' was not found in the cache. Did you forget to add it to your zipcodes file before geocoding? Please add it and run this script again, no distances can be calculated without it.")
-        exit(1)
+def compute_distances(rows: List[Tuple[str, str]], cache: Dict[str, Tuple[float, float]]) -> Dict[Tuple[str, str], float]:
+    info(f"Computing distances for {len(rows)} rows...")
 
     result = {}
 
-    for destination in destinations:
-        distance = compute_distance(origin_zipcode, destination, cache)
+    for pair in rows:
+        if pair[0] not in cache:
+            warn(f"Zipcode {pair[0]} was not in cache, skipping distance between {pair[0]} and {pair[1]}")
+            continue
+        if pair[1] not in cache:
+            warn(f"Zipcode {pair[0]} was not in cache, skipping distance between {pair[0]} and {pair[1]}")
+            continue
+
+        distance = compute_distance(pair[0], pair[1], cache)
         if distance is None:
             continue
         
-        result[(origin_zipcode, destination)] = distance
+        result[pair] = distance
 
     info("Done computing distances!")
     return result
 
 
-def write_distances_to_file(output_filepath: Path, distances: Dict[Tuple[str, str], float]):
+def write_distances_to_file(
+        output_filepath: Path,
+        input_rows: List[Tuple[str, str]],
+        distances: Dict[Tuple[str, str], float]):
     if not output_filepath.exists():
         info(f"Output file for distances '{output_filepath}' does not exist. Creating...")
         output_filepath.touch()
-        info(f"Created output file.")
+        info("Created output file.")
 
     with open(output_filepath, "w") as distances_csv:
         info("Writing distances to output file...")
@@ -265,17 +286,29 @@ def write_distances_to_file(output_filepath: Path, distances: Dict[Tuple[str, st
         # Write header row
         distances_csv.write("origin_zipcode,destination_zipcode,distance_miles\n")
 
-        for key, distance in distances.items():
-            (origin, destination) = key
-            distances_csv.write(f"{origin},{destination},{distance}\n")
+        # Iterate through the input rather than the output,
+        # because then we'll know if we need to write blank rows
+        # for any rows that weren't able to be fetched & calculated.
+        for row in input_rows:
+            try:
+                distance = distances[row]
+                distances_csv.write(f"{row[0]},{row[1]},{distance}\n")
+                continue
+
+            except KeyError:
+                # Row wasn't able to be calculated, write a blank line and continue
+                pass
+
+            distances_csv.write(",,\n")
 
     info(f"Done! Check '{output_filepath}' for your results.")
 
 
 def main():
     zipcodes = load_zipcodes_from_file(filepath=zipcodes_file)
-    if zipcodes == None:
-        printerr(f"Zipcodes file didn't exist. Please add it and run again. Make sure that all zipcodes you need to use in your distances are in the file, including the origin zipcode.")
+    if zipcodes is None:
+        printerr("Zipcodes file didn't exist. Please add it and run again."
+                 + " The zipcodes file should be a .csv file with a header row \"origin,destination\"")
         return
     
     cache = load_cached_geocoded_zipcodes(geocode_cache_file)
@@ -286,8 +319,8 @@ def main():
     request_and_cache_all(zipcodes, cache)
     write_cache_to_csv(geocode_cache_file, cache)
 
-    distances = compute_distances(origin_zipcode=origin_zipcode, destinations=zipcodes, cache=cache)
-    write_distances_to_file(output_filepath=distances_file, distances=distances)
+    distances = compute_distances(rows=zipcodes, cache=cache)
+    write_distances_to_file(input_rows=zipcodes, output_filepath=distances_file, distances=distances)
 
 
 if __name__ == "__main__":
